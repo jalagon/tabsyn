@@ -407,7 +407,6 @@ def transform_dataset(
             transformations.seed,
             return_normalizer=True
         )
-        num_transform = num_transform
     
     if dataset.X_cat is None:
         assert transformations.cat_nan_policy is None

@@ -144,12 +144,12 @@ def main(args: Namespace) -> None:
 
         curr_count = 0
 
-        for batch_num, batch_cat in pbar:
+        for batch_num_cpu, batch_cat_cpu in pbar:
             model.train()
             optimizer.zero_grad()
 
-            batch_num = batch_num.to(device)
-            batch_cat = batch_cat.to(device)
+            batch_num = batch_num_cpu.to(device)
+            batch_cat = batch_cat_cpu.to(device)
 
             Recon_X_num, Recon_X_cat, mu_z, std_z = model(batch_num, batch_cat)
 

@@ -2,13 +2,23 @@ import statistics
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, cast
 
-# import rtdl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import zero
 from torch import Tensor
+
+try:
+    import rtdl  # type: ignore[import]
+    _RTDL_MODULES = (
+        rtdl.CLSToken,
+        rtdl.NumericalFeatureTokenizer,
+        rtdl.CategoricalFeatureTokenizer,
+    )
+except ImportError:  # pragma: no cover - rtdl is optional
+    rtdl = None  # type: ignore[assignment]
+    _RTDL_MODULES: tuple[type, ...] = ()
 
 from .util import TaskType
 
@@ -58,19 +68,20 @@ def get_loss_fn(task_type: TaskType) -> Callable[..., Tensor]:
     )
 
 
-def default_zero_weight_decay_condition(module_name, module, parameter_name, parameter):
+ZERO_WEIGHT_DECAY_MODULES = (
+    nn.BatchNorm1d,
+    nn.LayerNorm,
+    nn.InstanceNorm1d,
+    Periodic,
+) + _RTDL_MODULES
+
+
+def default_zero_weight_decay_condition(
+    module_name, module, parameter_name, parameter
+):
     del module_name, parameter
-    return parameter_name.endswith('bias') or isinstance(
-        module,
-        (
-            nn.BatchNorm1d,
-            nn.LayerNorm,
-            nn.InstanceNorm1d,
-            rtdl.CLSToken,
-            rtdl.NumericalFeatureTokenizer,
-            rtdl.CategoricalFeatureTokenizer,
-            Periodic,
-        ),
+    return parameter_name.endswith("bias") or isinstance(
+        module, ZERO_WEIGHT_DECAY_MODULES
     )
 
 
