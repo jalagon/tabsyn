@@ -226,7 +226,5 @@ def process_invalid_id(
         ``syn_cat`` with all values clipped to the provided bounds.
     """
 
-    syn_cat = np.clip(syn_cat, min_cat, max_cat)
-
-    return syn_cat
+    return np.clip(syn_cat, min_cat, max_cat)
 

@@ -82,8 +82,7 @@ class MLP(nn.Module):
         """Forward pass through the MLP."""
         x = F.relu(self.fc1(x))
         x = self.dropout_layer(x)
-        x = self.fc2(x)
-        return x
+        return self.fc2(x)
 
 
 class MultiheadAttention(nn.Module):
@@ -227,7 +226,7 @@ class Transformer(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         """Apply the Transformer layers."""
-        for layer_idx, layer in enumerate(self.layers):
+        for layer in self.layers:
             x_residual = self._start_residual(x, layer, 0)
             x_residual = layer["attention"](x_residual, x_residual)
 
@@ -263,9 +262,7 @@ class AE(nn.Module):
         """Forward pass through the autoencoder."""
 
         z = self.encoder(x, x)
-        h = self.decoder(z, z)
-
-        return h
+        return self.decoder(z, z)
 
 
 class VAE(nn.Module):
@@ -412,9 +409,7 @@ class Encoder_model(nn.Module):
     def forward(self, x_num: Tensor, x_cat: Tensor) -> Tensor:
         """Encode inputs to latent space."""
         x = self.Tokenizer(x_num, x_cat)
-        z = self.VAE_Encoder(x)
-
-        return z
+        return self.VAE_Encoder(x)
 
 
 class Decoder_model(nn.Module):

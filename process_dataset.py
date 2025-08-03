@@ -66,11 +66,6 @@ def preprocess_news() -> None:
     data_save_path = 'data/news/news.csv'
     data_df.to_csv(f'{data_save_path}', index=False)
 
-    columns = np.array(data_df.columns.tolist())
-    num_columns = columns[list(range(45))]
-    cat_columns = ['data_channel', 'weekday']
-    target_columns = columns[[45]]
-
     info['num_col_idx'] = list(range(45))
     info['cat_col_idx'] = [46, 47]
     info['target_col_idx'] = [45]
