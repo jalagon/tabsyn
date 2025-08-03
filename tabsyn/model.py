@@ -6,96 +6,89 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim
 from torch import Tensor
+
 from tabsyn.diffusion_utils import EDMLoss
 
 ModuleType = Union[str, Callable[..., nn.Module]]
 
+
 class SiLU(nn.Module):
-    def forward(self, x):
+    """Sigmoid Linear Unit activation."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Apply the SiLU activation."""
         return x * torch.sigmoid(x)
 
+
 class PositionalEmbedding(torch.nn.Module):
-    def __init__(self, num_channels, max_positions=10000, endpoint=False):
+    """Generate sine/cosine positional embeddings."""
+
+    def __init__(self, num_channels: int, max_positions: int = 10000, endpoint: bool = False) -> None:
         super().__init__()
         self.num_channels = num_channels
         self.max_positions = max_positions
         self.endpoint = endpoint
 
-    def forward(self, x):
-        freqs = torch.arange(start=0, end=self.num_channels//2, dtype=torch.float32, device=x.device)
+    def forward(self, x: Tensor) -> Tensor:
+        """Compute positional embeddings for input ``x``."""
+        freqs = torch.arange(start=0, end=self.num_channels // 2, dtype=torch.float32, device=x.device)
         freqs = freqs / (self.num_channels // 2 - (1 if self.endpoint else 0))
         freqs = (1 / self.max_positions) ** freqs
         x = x.ger(freqs.to(x.dtype))
         x = torch.cat([x.cos(), x.sin()], dim=1)
         return x
 
+
 def reglu(x: Tensor) -> Tensor:
-    """The ReGLU activation function from [1].
-    References:
-        [1] Noam Shazeer, "GLU Variants Improve Transformer", 2020
-    """
+    """Apply the ReGLU activation [Shazeer, 2020]."""
+
     assert x.shape[-1] % 2 == 0
     a, b = x.chunk(2, dim=-1)
     return a * F.relu(b)
 
 
 def geglu(x: Tensor) -> Tensor:
-    """The GEGLU activation function from [1].
-    References:
-        [1] Noam Shazeer, "GLU Variants Improve Transformer", 2020
-    """
+    """Apply the GEGLU activation [Shazeer, 2020]."""
+
     assert x.shape[-1] % 2 == 0
     a, b = x.chunk(2, dim=-1)
     return a * F.gelu(b)
 
+
 class ReGLU(nn.Module):
-    """The ReGLU activation function from [shazeer2020glu].
-
-    Examples:
-        .. testcode::
-
-            module = ReGLU()
-            x = torch.randn(3, 4)
-            assert module(x).shape == (3, 2)
-
-    References:
-        * [shazeer2020glu] Noam Shazeer, "GLU Variants Improve Transformer", 2020
-    """
+    """Module wrapper around :func:`reglu`."""
 
     def forward(self, x: Tensor) -> Tensor:
+        """Apply ReGLU to ``x``."""
         return reglu(x)
 
 
 class GEGLU(nn.Module):
-    """The GEGLU activation function from [shazeer2020glu].
-
-    Examples:
-        .. testcode::
-
-            module = GEGLU()
-            x = torch.randn(3, 4)
-            assert module(x).shape == (3, 2)
-
-    References:
-        * [shazeer2020glu] Noam Shazeer, "GLU Variants Improve Transformer", 2020
-    """
+    """Module wrapper around :func:`geglu`."""
 
     def forward(self, x: Tensor) -> Tensor:
+        """Apply GEGLU to ``x``."""
         return geglu(x)
 
 
 class FourierEmbedding(torch.nn.Module):
-    def __init__(self, num_channels, scale=16):
-        super().__init__()
-        self.register_buffer('freqs', torch.randn(num_channels // 2) * scale)
+    """Random Fourier feature positional embedding."""
 
-    def forward(self, x):
+    def __init__(self, num_channels: int, scale: int = 16) -> None:
+        super().__init__()
+        self.register_buffer("freqs", torch.randn(num_channels // 2) * scale)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Compute Fourier embeddings for ``x``."""
         x = x.ger((2 * np.pi * self.freqs).to(x.dtype))
         x = torch.cat([x.cos(), x.sin()], dim=1)
         return x
 
+
 class MLPDiffusion(nn.Module):
-    def __init__(self, d_in, dim_t = 512):
+    """Simple MLP-based denoising network."""
+
+    def __init__(self, d_in: int, dim_t: int = 512) -> None:
         super().__init__()
         self.dim_t = dim_t
 
@@ -115,36 +108,41 @@ class MLPDiffusion(nn.Module):
         self.time_embed = nn.Sequential(
             nn.Linear(dim_t, dim_t),
             nn.SiLU(),
-            nn.Linear(dim_t, dim_t)
+            nn.Linear(dim_t, dim_t),
         )
-    
-    def forward(self, x, noise_labels, class_labels=None):
+
+    def forward(self, x: Tensor, noise_labels: Tensor, class_labels: Optional[Tensor] = None) -> Tensor:
+        """Denoise ``x`` conditioned on noise labels."""
         emb = self.map_noise(noise_labels)
-        emb = emb.reshape(emb.shape[0], 2, -1).flip(1).reshape(*emb.shape) # swap sin/cos
+        emb = emb.reshape(emb.shape[0], 2, -1).flip(1).reshape(*emb.shape)  # swap sin/cos
         emb = self.time_embed(emb)
-    
+
         x = self.proj(x) + emb
         return self.mlp(x)
 
 
 class Precond(nn.Module):
-    def __init__(self,
-        denoise_fn,
-        hid_dim,
-        sigma_min = 0,                # Minimum supported noise level.
-        sigma_max = float('inf'),     # Maximum supported noise level.
-        sigma_data = 0.5,              # Expected standard deviation of the training data.
-    ):
+    """Wrapper that applies EDM preconditioning."""
+
+    def __init__(
+        self,
+        denoise_fn: Callable[[Tensor, Tensor], Tensor],
+        hid_dim: int,
+        sigma_min: float = 0,
+        sigma_max: float = float("inf"),
+        sigma_data: float = 0.5,
+    ) -> None:
         super().__init__()
 
         self.hid_dim = hid_dim
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
         self.sigma_data = sigma_data
-        ###########
+        # Wrapped denoising network.
         self.denoise_fn_F = denoise_fn
 
-    def forward(self, x, sigma):
+    def forward(self, x: Tensor, sigma: Tensor) -> Tensor:
+        """Apply preconditioning to ``x`` at noise level ``sigma``."""
 
         x = x.to(torch.float32)
 
@@ -163,18 +161,32 @@ class Precond(nn.Module):
         D_x = c_skip * x + c_out * F_x.to(torch.float32)
         return D_x
 
-    def round_sigma(self, sigma):
+    def round_sigma(self, sigma: Tensor) -> Tensor:
+        """Round ``sigma`` to the nearest supported value."""
         return torch.as_tensor(sigma)
-    
+
 
 class Model(nn.Module):
-    def __init__(self, denoise_fn, hid_dim, P_mean=-1.2, P_std=1.2, sigma_data=0.5, gamma=5, opts=None, pfgmpp = False):
+    """EDM-based diffusion model wrapper."""
+
+    def __init__(
+        self,
+        denoise_fn: Callable[[Tensor, Tensor], Tensor],
+        hid_dim: int,
+        P_mean: float = -1.2,
+        P_std: float = 1.2,
+        sigma_data: float = 0.5,
+        gamma: float = 5,
+        opts: Optional[Any] = None,
+        pfgmpp: bool = False,
+    ) -> None:
         super().__init__()
 
         self.denoise_fn_D = Precond(denoise_fn, hid_dim)
         self.loss_fn = EDMLoss(P_mean, P_std, sigma_data, hid_dim=hid_dim, gamma=5, opts=None)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """Compute the EDM loss for input ``x``."""
 
         loss = self.loss_fn(self.denoise_fn_D, x)
         return loss.mean(-1).mean()
