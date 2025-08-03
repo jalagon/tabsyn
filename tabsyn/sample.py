@@ -19,7 +19,14 @@ warnings.filterwarnings("ignore")
 
 
 def main(args: Namespace) -> None:
-    """Generate synthetic data and save it to disk."""
+    """Generate synthetic data and save it to disk.
+
+    Args:
+        args: Parsed command line arguments governing generation.
+
+    Returns:
+        None. Synthetic samples are written to ``args.save_path``.
+    """
 
     dataname = args.dataname
     device = args.device
@@ -31,10 +38,9 @@ def main(args: Namespace) -> None:
 
     mean = train_z.mean(0)
 
+    # Build and load the pre-trained diffusion model.
     denoise_fn = MLPDiffusion(in_dim, 1024).to(device)
-
     model = Model(denoise_fn=denoise_fn, hid_dim=train_z.shape[1]).to(device)
-
     model.load_state_dict(torch.load(f"{ckpt_path}/model.pt"))
 
     # Generating samples
@@ -43,6 +49,7 @@ def main(args: Namespace) -> None:
     num_samples = train_z.shape[0]
     sample_dim = in_dim
 
+    # Draw synthetic latent vectors and denormalize.
     x_next = sample(model.denoise_fn_D, num_samples, sample_dim)
     x_next = x_next * 2 + mean.to(device)
 
@@ -72,6 +79,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', type=int, default=0, help='GPU index.')
     parser.add_argument('--epoch', type=int, default=None, help='Epoch.')
     parser.add_argument('--steps', type=int, default=None, help='Number of function evaluations.')
+    parser.add_argument('--save_path', type=str, default='samples.csv', help='File to store generated data.')
 
     args = parser.parse_args()
 
@@ -80,4 +88,5 @@ if __name__ == '__main__':
         args.device = f"cuda:{args.gpu}"
     else:
         args.device = "cpu"
-
+    
+    main(args)

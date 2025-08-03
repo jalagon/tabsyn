@@ -215,7 +215,16 @@ def recover_data(
 def process_invalid_id(
     syn_cat: np.ndarray, min_cat: np.ndarray, max_cat: np.ndarray
 ) -> np.ndarray:
-    """Clamp categorical identifiers to a valid range."""
+    """Clamp categorical identifiers to a valid range.
+
+    Args:
+        syn_cat: Array of categorical values to sanitize.
+        min_cat: Minimum allowed categorical identifiers.
+        max_cat: Maximum allowed categorical identifiers.
+
+    Returns:
+        ``syn_cat`` with all values clipped to the provided bounds.
+    """
 
     syn_cat = np.clip(syn_cat, min_cat, max_cat)
 
