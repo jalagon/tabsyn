@@ -156,7 +156,14 @@ class VPLoss:
         return loss
 
     def sigma(self, t: torch.Tensor) -> torch.Tensor:
-        """Compute the noise level from a time value."""
+        """Compute the noise level from a time value.
+
+        Args:
+            t: Time parameter controlling the noise schedule.
+
+        Returns:
+            Noise level ``sigma`` derived from ``t``.
+        """
         t = torch.as_tensor(t)
         return ((0.5 * self.beta_d * (t ** 2) + self.beta_min * t).exp() - 1).sqrt()
 
@@ -176,7 +183,15 @@ class VELoss:
         N: int = 3072,
         opts: Optional[Any] = None,
     ) -> None:
-        """Initialize VELoss parameters."""
+        """Initialize VELoss parameters.
+
+        Args:
+            sigma_min: Minimum noise level.
+            sigma_max: Maximum noise level.
+            D: Dimensionality of the hidden representation.
+            N: Dimensionality of the augmentation space.
+            opts: Optional configuration object.
+        """
 
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
@@ -267,7 +282,16 @@ class EDMLoss:
         gamma: float = 5,
         opts: Optional[Any] = None,
     ) -> None:
-        """Initialize the EDM loss."""
+        """Initialize the EDM loss.
+
+        Args:
+            P_mean: Mean of the log-normal noise distribution.
+            P_std: Standard deviation of the log-normal noise distribution.
+            sigma_data: Expected data standard deviation.
+            hid_dim: Hidden dimensionality used by the model.
+            gamma: Loss scaling parameter.
+            opts: Optional configuration object.
+        """
         self.P_mean = P_mean
         self.P_std = P_std
         self.sigma_data = sigma_data

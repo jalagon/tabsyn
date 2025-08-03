@@ -22,6 +22,9 @@ def main(args: Namespace) -> None:
 
     Args:
         args: Parsed command line arguments.
+
+    Returns:
+        None. The trained model is saved to disk.
     """
 
     device = args.device
@@ -37,7 +40,7 @@ def main(args: Namespace) -> None:
 
     mean, std = train_z.mean(0), train_z.std(0)
 
-    # Normalize latent vectors.
+    # Normalize latent vectors to improve training stability.
     train_z = (train_z - mean) / 2
     train_data = train_z
 
@@ -122,3 +125,5 @@ if __name__ == '__main__':
         args.device = f"cuda:{args.gpu}"
     else:
         args.device = "cpu"
+
+    main(args)
