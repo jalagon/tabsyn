@@ -56,8 +56,7 @@ class PositionalEmbedding(torch.nn.Module):
         freqs = freqs / (self.num_channels // 2 - (1 if self.endpoint else 0))
         freqs = (1 / self.max_positions) ** freqs
         x = x.ger(freqs.to(x.dtype))
-        x = torch.cat([x.cos(), x.sin()], dim=1)
-        return x
+        return torch.cat([x.cos(), x.sin()], dim=1)
 
 
 def reglu(x: Tensor) -> Tensor:
@@ -141,8 +140,7 @@ class FourierEmbedding(torch.nn.Module):
             Tensor containing concatenated ``cos`` and ``sin`` features.
         """
         x = x.ger((2 * np.pi * self.freqs).to(x.dtype))
-        x = torch.cat([x.cos(), x.sin()], dim=1)
-        return x
+        return torch.cat([x.cos(), x.sin()], dim=1)
 
 
 class MLPDiffusion(nn.Module):
@@ -251,8 +249,7 @@ class Precond(nn.Module):
         F_x = self.denoise_fn_F((x_in).to(dtype), c_noise.flatten())
 
         assert F_x.dtype == dtype
-        D_x = c_skip * x + c_out * F_x.to(torch.float32)
-        return D_x
+        return c_skip * x + c_out * F_x.to(torch.float32)
 
     def round_sigma(self, sigma: Tensor) -> Tensor:
         """Round ``sigma`` to the nearest supported value.

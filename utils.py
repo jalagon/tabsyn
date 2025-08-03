@@ -31,7 +31,7 @@ def execute_function(method: str, mode: str) -> Callable[[argparse.Namespace], N
 
     try:
         train_module = importlib.import_module(module_name)
-        train_function = getattr(train_module, 'main')
+        train_function = train_module.main
     except ModuleNotFoundError:
         print(f"Module {module_name} not found.")
         exit(1)
@@ -162,6 +162,4 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--save_path', type=str, default=None, help='Path to save synthetic data.')
     parser.add_argument('--steps', type=int, default=50, help='NFEs.')
     
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()

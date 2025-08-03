@@ -28,9 +28,7 @@ def main(args: Namespace) -> None:
         None. Synthetic samples are written to ``args.save_path``.
     """
 
-    dataname = args.dataname
     device = args.device
-    steps = args.steps
     save_path = args.save_path
 
     train_z, _, _, ckpt_path, info, num_inverse, cat_inverse = get_input_generate(args)

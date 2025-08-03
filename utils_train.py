@@ -30,8 +30,7 @@ class TabularDataset(Dataset):
         """
         this_num = self.X_num[index]
         this_cat = self.X_cat[index]
-        sample = (this_num, this_cat)
-        return sample
+        return this_num, this_cat
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset."""

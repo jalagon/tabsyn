@@ -152,8 +152,7 @@ class VPLoss:
         y, augment_labels = augment_pipe(data) if augment_pipe is not None else (data, None)
         n = torch.randn_like(y) * sigma
         D_yn = denosie_fn(y + n, sigma, labels, augment_labels=augment_labels)
-        loss = weight * ((D_yn - y) ** 2)
-        return loss
+        return weight * ((D_yn - y) ** 2)
 
     def sigma(self, t: torch.Tensor) -> torch.Tensor:
         """Compute the noise level from a time value.
@@ -263,8 +262,7 @@ class VELoss:
             n = torch.randn_like(y) * sigma
             D_yn = denosie_fn(y + n, sigma, labels, augment_labels=augment_labels)
 
-        loss = weight * ((D_yn - y) ** 2)
-        return loss
+        return weight * ((D_yn - y) ** 2)
 
 #----------------------------------------------------------------------------
 # Improved loss function proposed in the paper "Elucidating the Design Space
@@ -320,7 +318,5 @@ class EDMLoss:
         D_yn = denoise_fn(y + n, sigma)
 
         target = y
-        loss = weight.unsqueeze(1) * ((D_yn - target) ** 2)
-
-        return loss
+        return weight.unsqueeze(1) * ((D_yn - target) ** 2)
 

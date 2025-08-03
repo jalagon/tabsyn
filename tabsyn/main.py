@@ -38,7 +38,7 @@ def main(args: Namespace) -> None:
 
     in_dim = train_z.shape[1]
 
-    mean, std = train_z.mean(0), train_z.std(0)
+    mean = train_z.mean(0)
 
     # Normalize latent vectors to improve training stability.
     train_z = (train_z - mean) / 2

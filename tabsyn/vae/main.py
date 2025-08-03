@@ -9,8 +9,6 @@ import os
 import time
 import warnings
 
-import numpy as np
-import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
