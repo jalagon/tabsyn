@@ -11,11 +11,16 @@ from .util import TaskType
 
 
 class PredictionType(enum.Enum):
+    """Type of predictions produced by a model."""
+
     LOGITS = 'logits'
     PROBS = 'probs'
 
 class MetricsReport:
+    """Wrapper around metric dictionaries for easier access."""
+
     def __init__(self, report: dict, task_type: TaskType):
+        """Create the report from a raw metrics dictionary."""
         self._res = {k: {} for k in report.keys()}
         if task_type in (TaskType.BINCLASS, TaskType.MULTICLASS):
             self._metrics_names = ["acc", "f1"]
@@ -35,27 +40,33 @@ class MetricsReport:
             raise "Unknown TaskType!"
 
     def get_splits_names(self) -> list[str]:
-        return self._res.keys()
+        """Return the available split names (train/val/test)."""
+        return list(self._res.keys())
 
     def get_metrics_names(self) -> list[str]:
+        """Return the names of stored metrics."""
         return self._metrics_names
 
     def get_metric(self, split: str, metric: str) -> float:
+        """Fetch a metric for a given split."""
         return self._res[split][metric]
 
     def get_val_score(self) -> float:
-        return self._res["val"]["r2"] if "r2" in self._res["val"] else self._res["val"]["f1"]
+        """Return the primary validation score."""
+        return self._res["val"].get("r2", self._res["val"]["f1"])
     
     def get_test_score(self) -> float:
-        return self._res["test"]["r2"] if "r2" in self._res["test"] else self._res["test"]["f1"]
+        """Return the primary test score."""
+        return self._res["test"].get("r2", self._res["test"]["f1"])
     
-    def print_metrics(self) -> None:
+    def print_metrics(self) -> dict:
+        """Pretty-print the metrics and return a rounded copy."""
         res = {
             "val": {k: np.around(self._res["val"][k], 4) for k in self._res["val"]},
             "test": {k: np.around(self._res["test"][k], 4) for k in self._res["test"]}
         }
-    
-        print("*"*100)
+
+        print("*" * 100)
         print("[val]")
         print(res["val"])
         print("[test]")
@@ -64,13 +75,17 @@ class MetricsReport:
         return res
 
 class SeedsMetricsReport:
-    def __init__(self):
-        self._reports = []
+    """Aggregate metrics across multiple random seeds."""
+
+    def __init__(self) -> None:
+        self._reports: list[MetricsReport] = []
 
     def add_report(self, report: MetricsReport) -> None:
+        """Add a single seed's metrics."""
         self._reports.append(report)
-    
+
     def get_mean_std(self) -> dict:
+        """Compute mean and standard deviation of metrics across seeds."""
         res = {k: {} for k in ["train", "val", "test"]}
         for split in self._reports[0].get_splits_names():
             for metric in self._reports[0].get_metrics_names():
@@ -87,18 +102,22 @@ class SeedsMetricsReport:
         return agg_res
 
     def print_result(self) -> dict:
-        res = {split: {k: float(np.around(self._agg_res[split][k], 4)) for k in self._agg_res[split]} for split in ["val", "test"]}
-        print("="*100)
+        """Print aggregated validation and test results."""
+        res = {
+            split: {k: float(np.around(self._agg_res[split][k], 4)) for k in self._agg_res[split]}
+            for split in ["val", "test"]
+        }
+        print("=" * 100)
         print("EVAL RESULTS:")
         print("[val]")
         print(res["val"])
         print("[test]")
         print(res["test"])
-        print("="*100)
+        print("=" * 100)
         return res
 
-def calculate_rmse(
-    y_true: np.ndarray, y_pred: np.ndarray, std = None) -> float:
+def calculate_rmse(y_true: np.ndarray, y_pred: np.ndarray, std: float | None = None) -> float:
+    """Root mean squared error with optional rescaling."""
     rmse = skm.mean_squared_error(y_true, y_pred) ** 0.5
     if std is not None:
         rmse *= std
@@ -106,8 +125,11 @@ def calculate_rmse(
 
 
 def _get_labels_and_probs(
-    y_pred: np.ndarray, task_type: TaskType, prediction_type: Optional[PredictionType]
+    y_pred: np.ndarray,
+    task_type: TaskType,
+    prediction_type: Optional[PredictionType],
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """Convert model outputs to class labels and probabilities."""
     assert task_type in (TaskType.BINCLASS, TaskType.MULTICLASS)
 
     if prediction_type is None:
@@ -136,7 +158,7 @@ def calculate_metrics(
     prediction_type: Optional[Union[str, PredictionType]],
     y_info: Dict[str, Any],
 ) -> Dict[str, Any]:
-    # Example: calculate_metrics(y_true, y_pred, 'binclass', 'logits', {})
+    """Compute evaluation metrics for regression and classification tasks."""
     task_type = TaskType(task_type)
     if prediction_type is not None:
         prediction_type = PredictionType(prediction_type)

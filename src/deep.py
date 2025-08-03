@@ -14,11 +14,22 @@ from .util import TaskType
 
 
 def cos_sin(x: Tensor) -> Tensor:
+    """Concatenate cosine and sine transformations of the input.
+
+    Args:
+        x: Input tensor containing angular values.
+
+    Returns:
+        Tensor: Tensor with cosine and sine of ``x`` concatenated on the last
+        dimension.
+    """
     return torch.cat([torch.cos(x), torch.sin(x)], -1)
 
 
 @dataclass
 class PeriodicOptions:
+    """Configuration for :class:`Periodic` features."""
+
     n: int  # the output size is 2 * n
     sigma: float
     trainable: bool
@@ -26,7 +37,15 @@ class PeriodicOptions:
 
 
 class Periodic(nn.Module):
+    """Apply periodic (Fourier-like) encoding to numerical features."""
+
     def __init__(self, n_features: int, options: PeriodicOptions) -> None:
+        """Initialize the encoder.
+
+        Args:
+            n_features: Number of input features.
+            options: Configuration describing frequency parameters.
+        """
         super().__init__()
         if options.initialization == 'log-linear':
             coefficients = options.sigma ** (torch.arange(options.n) / options.n)
@@ -40,15 +59,25 @@ class Periodic(nn.Module):
             self.register_buffer('coefficients', coefficients)
 
     def forward(self, x: Tensor) -> Tensor:
+        """Encode features using periodic functions.
+
+        Args:
+            x: 2D tensor of shape ``(batch, features)``.
+
+        Returns:
+            Tensor: Periodic representation of the input features.
+        """
         assert x.ndim == 2
         return cos_sin(2 * torch.pi * self.coefficients[None] * x[..., None])
 
 
-def get_n_parameters(m: nn.Module):
+def get_n_parameters(m: nn.Module) -> int:
+    """Count the number of trainable parameters in a model."""
     return sum(x.numel() for x in m.parameters() if x.requires_grad)
 
 
 def get_loss_fn(task_type: TaskType) -> Callable[..., Tensor]:
+    """Return an appropriate loss function for the task."""
     return (
         F.binary_cross_entropy_with_logits
         if task_type == TaskType.BINCLASS
@@ -58,7 +87,16 @@ def get_loss_fn(task_type: TaskType) -> Callable[..., Tensor]:
     )
 
 
-def default_zero_weight_decay_condition(module_name, module, parameter_name, parameter):
+def default_zero_weight_decay_condition(
+    module_name: str,
+    module: nn.Module,
+    parameter_name: str,
+    parameter: nn.Parameter,
+) -> bool:
+    """Decide whether a parameter should have zero weight decay.
+
+    Bias terms and normalization parameters typically should not be decayed.
+    """
     del module_name, parameter
     return parameter_name.endswith('bias') or isinstance(
         module,
@@ -75,8 +113,10 @@ def default_zero_weight_decay_condition(module_name, module, parameter_name, par
 
 
 def split_parameters_by_weight_decay(
-    model: nn.Module, zero_weight_decay_condition=default_zero_weight_decay_condition
+    model: nn.Module,
+    zero_weight_decay_condition: Callable[[str, nn.Module, str, nn.Parameter], bool] = default_zero_weight_decay_condition,
 ) -> list[dict[str, Any]]:
+    """Group model parameters by whether weight decay should be applied."""
     parameters_info = {}
     for module_name, module in model.named_modules():
         for parameter_name, parameter in module.named_parameters():
@@ -99,8 +139,9 @@ def split_parameters_by_weight_decay(
 
 def make_optimizer(
     config: dict[str, Any],
-    parameter_groups,
+    parameter_groups: list[dict[str, Any]],
 ) -> optim.Optimizer:
+    """Instantiate an optimizer from a configuration dictionary."""
     if config['optimizer'] == 'FT-Transformer-default':
         return optim.AdamW(parameter_groups, lr=1e-4, weight_decay=1e-5)
     return getattr(optim, config['optimizer'])(
@@ -110,10 +151,12 @@ def make_optimizer(
 
 
 def get_lr(optimizer: optim.Optimizer) -> float:
+    """Get the current learning rate from an optimizer."""
     return next(iter(optimizer.param_groups))['lr']
 
 
 def is_oom_exception(err: RuntimeError) -> bool:
+    """Check whether an exception is caused by GPU out-of-memory."""
     return any(
         x in str(err)
         for x in [
@@ -125,12 +168,13 @@ def is_oom_exception(err: RuntimeError) -> bool:
 
 
 def train_with_auto_virtual_batch(
-    optimizer,
-    loss_fn,
-    step,
-    batch,
+    optimizer: optim.Optimizer,
+    loss_fn: Callable[..., Tensor],
+    step: Callable[[Any], Any],
+    batch: Any,
     chunk_size: int,
 ) -> tuple[Tensor, int]:
+    """Train with automatic virtual batching to avoid OOM errors."""
     batch_size = len(batch)
     random_state = zero.random.get_state()
     loss = None
@@ -154,7 +198,7 @@ def train_with_auto_virtual_batch(
         except RuntimeError as err:
             if not is_oom_exception(err):
                 raise
-            chunk_size //= 2
+            chunk_size //= 2  # halve the chunk size and retry
         else:
             break
     if not chunk_size:
@@ -164,5 +208,6 @@ def train_with_auto_virtual_batch(
 
 
 def process_epoch_losses(losses: list[Tensor]) -> tuple[list[float], float]:
+    """Convert a list of loss tensors to Python floats and compute the mean."""
     losses_ = torch.stack(losses).tolist()
     return losses_, statistics.mean(losses_)
