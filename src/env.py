@@ -14,6 +14,7 @@ DATA = PROJ / 'data'
 
 
 def get_path(path: ty.Union[str, Path]) -> Path:
+    """Return absolute path within the project."""
     if isinstance(path, str):
         path = Path(path)
     if not path.is_absolute():
@@ -22,12 +23,14 @@ def get_path(path: ty.Union[str, Path]) -> Path:
 
 
 def get_relative_path(path: ty.Union[str, Path]) -> Path:
+    """Return path relative to project root."""
     return get_path(path).relative_to(PROJ)
 
 
 def duplicate_path(
     src: ty.Union[str, Path], alternative_project_dir: ty.Union[str, Path]
 ) -> None:
+    """Copy file or directory to another project directory."""
     src = get_path(src)
     alternative_project_dir = get_path(alternative_project_dir)
     dst = alternative_project_dir / src.relative_to(PROJ)

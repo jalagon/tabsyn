@@ -55,8 +55,10 @@ class TaskType(enum.Enum):
 #         return timer
 
 
-def update_training_log(training_log, data, metrics):
-    def _update(log_part, data_part):
+def update_training_log(training_log: dict, data: dict, metrics: dict) -> None:
+    """Recursively merge data and metrics into a training log."""
+
+    def _update(log_part: dict, data_part: dict) -> None:
         for k, v in data_part.items():
             if isinstance(v, dict):
                 _update(log_part.setdefault(k, {}), v)
@@ -66,14 +68,15 @@ def update_training_log(training_log, data, metrics):
                 log_part.setdefault(k, []).append(v)
 
     _update(training_log, data)
-    transposed_metrics = {}
+    transposed_metrics: Dict[str, Dict[str, Any]] = {}
     for part, part_metrics in metrics.items():
         for metric_name, value in part_metrics.items():
             transposed_metrics.setdefault(metric_name, {})[part] = value
     _update(training_log, transposed_metrics)
 
 
-def raise_unknown(unknown_what: str, unknown_value: Any):
+def raise_unknown(unknown_what: str, unknown_value: Any) -> None:
+    """Raise a standardized error for unknown values."""
     raise ValueError(f'Unknown {unknown_what}: {unknown_value}')
 
 
@@ -93,49 +96,58 @@ _CONFIG_NONE = '__none__'
 
 
 def unpack_config(config: RawConfig) -> RawConfig:
+    """Replace sentinel values with ``None``."""
     config = cast(RawConfig, _replace(config, lambda x: x == _CONFIG_NONE, None))
     return config
 
 
 def pack_config(config: RawConfig) -> RawConfig:
+    """Replace ``None`` values with sentinel for serialization."""
     config = cast(RawConfig, _replace(config, lambda x: x is None, _CONFIG_NONE))
     return config
 
 
 def load_config(path: Union[Path, str]) -> Any:
+    """Load a TOML configuration file."""
     with open(path, 'rb') as f:
         return unpack_config(tomli.load(f))
 
 
 def dump_config(config: Any, path: Union[Path, str]) -> None:
+    """Serialize configuration to TOML file."""
     with open(path, 'wb') as f:
         tomli_w.dump(pack_config(config), f)
-    # check that there are no bugs in all these "pack/unpack" things
     assert config == load_config(path)
 
 
 def load_json(path: Union[Path, str], **kwargs) -> Any:
+    """Load JSON data from a file."""
     return json.loads(Path(path).read_text(), **kwargs)
 
 
 def dump_json(x: Any, path: Union[Path, str], **kwargs) -> None:
+    """Write JSON data to a file."""
     kwargs.setdefault('indent', 4)
     Path(path).write_text(json.dumps(x, **kwargs) + '\n')
 
 
 def load_pickle(path: Union[Path, str], **kwargs) -> Any:
+    """Load object from a pickle file."""
     return pickle.loads(Path(path).read_bytes(), **kwargs)
 
 
 def dump_pickle(x: Any, path: Union[Path, str], **kwargs) -> None:
+    """Serialize object to a pickle file."""
     Path(path).write_bytes(pickle.dumps(x, **kwargs))
 
 
 def load(path: Union[Path, str], **kwargs) -> Any:
+    """Load object depending on file extension."""
     return globals()[f'load_{Path(path).suffix[1:]}'](Path(path), **kwargs)
 
 
 def dump(x: Any, path: Union[Path, str], **kwargs) -> Any:
+    """Dump object depending on file extension."""
     return globals()[f'dump_{Path(path).suffix[1:]}'](x, Path(path), **kwargs)
 
 
@@ -156,33 +168,40 @@ def _get_output_item_path(
 
 
 def load_report(path: Path) -> Report:
+    """Load experiment report from disk."""
     return load_json(_get_output_item_path(path, 'report.json', True))
 
 
 def dump_report(report: dict, path: Path) -> None:
+    """Save experiment report to disk."""
     dump_json(report, _get_output_item_path(path, 'report.json', False))
 
 
 def load_predictions(path: Path) -> Dict[str, np.ndarray]:
+    """Load saved predictions from `.npz` file."""
     with np.load(_get_output_item_path(path, 'predictions.npz', True)) as predictions:
         return {x: predictions[x] for x in predictions}
 
 
 def dump_predictions(predictions: Dict[str, np.ndarray], path: Path) -> None:
+    """Store predictions to an `.npz` file."""
     np.savez(_get_output_item_path(path, 'predictions.npz', False), **predictions)
 
 
 def dump_metrics(metrics: Dict[str, Any], path: Path) -> None:
+    """Persist metrics to JSON."""
     dump_json(metrics, _get_output_item_path(path, 'metrics.json', False))
 
 
 def load_checkpoint(path: Path, *args, **kwargs) -> Dict[str, np.ndarray]:
+    """Load PyTorch checkpoint from disk."""
     return torch.load(
         _get_output_item_path(path, 'checkpoint.pt', True), *args, **kwargs
     )
 
 
 def get_device() -> torch.device:
+    """Return CUDA device if available otherwise CPU."""
     if torch.cuda.is_available():
         assert os.environ.get('CUDA_VISIBLE_DEVICES') is not None
         return torch.device('cuda:0')
@@ -332,6 +351,7 @@ def _get_scores(metrics: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, float]
 
 
 def format_scores(metrics: Dict[str, Dict[str, Any]]) -> str:
+    """Format scores dictionary into a printable string."""
     return ' '.join(
         f"[{x}] {metrics[x]['score']:.3f}"
         for x in ['test', 'val', 'train']
@@ -340,6 +360,7 @@ def format_scores(metrics: Dict[str, Dict[str, Any]]) -> str:
 
 
 def finish(output_dir: Path, report: dict) -> None:
+    """Finalize experiment by saving reports and printing scores."""
     print()
     _print_sep('=')
 
@@ -379,6 +400,7 @@ def finish(output_dir: Path, report: dict) -> None:
 
 
 def from_dict(datacls: Type[T], data: dict) -> T:
+    """Create dataclass instance from plain dictionary recursively."""
     assert is_dataclass(datacls)
     data = deepcopy(data)
     for field in fields(datacls):

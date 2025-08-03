@@ -14,11 +14,14 @@ from .util import TaskType
 
 
 def cos_sin(x: Tensor) -> Tensor:
+    """Concatenate cosine and sine of input tensor."""
     return torch.cat([torch.cos(x), torch.sin(x)], -1)
 
 
 @dataclass
 class PeriodicOptions:
+    """Configuration options for :class:`Periodic`."""
+
     n: int  # the output size is 2 * n
     sigma: float
     trainable: bool
@@ -26,6 +29,8 @@ class PeriodicOptions:
 
 
 class Periodic(nn.Module):
+    """Periodic feature expansion layer."""
+
     def __init__(self, n_features: int, options: PeriodicOptions) -> None:
         super().__init__()
         if options.initialization == 'log-linear':
@@ -40,15 +45,18 @@ class Periodic(nn.Module):
             self.register_buffer('coefficients', coefficients)
 
     def forward(self, x: Tensor) -> Tensor:
+        """Apply periodic transformation to ``x``."""
         assert x.ndim == 2
         return cos_sin(2 * torch.pi * self.coefficients[None] * x[..., None])
 
 
-def get_n_parameters(m: nn.Module):
+def get_n_parameters(m: nn.Module) -> int:
+    """Count trainable parameters of a model."""
     return sum(x.numel() for x in m.parameters() if x.requires_grad)
 
 
 def get_loss_fn(task_type: TaskType) -> Callable[..., Tensor]:
+    """Return appropriate loss function for the task type."""
     return (
         F.binary_cross_entropy_with_logits
         if task_type == TaskType.BINCLASS
@@ -58,7 +66,13 @@ def get_loss_fn(task_type: TaskType) -> Callable[..., Tensor]:
     )
 
 
-def default_zero_weight_decay_condition(module_name, module, parameter_name, parameter):
+def default_zero_weight_decay_condition(
+    module_name: str,
+    module: nn.Module,
+    parameter_name: str,
+    parameter: nn.Parameter,
+) -> bool:
+    """Condition for excluding parameters from weight decay."""
     del module_name, parameter
     return parameter_name.endswith('bias') or isinstance(
         module,
@@ -77,6 +91,7 @@ def default_zero_weight_decay_condition(module_name, module, parameter_name, par
 def split_parameters_by_weight_decay(
     model: nn.Module, zero_weight_decay_condition=default_zero_weight_decay_condition
 ) -> list[dict[str, Any]]:
+    """Split model parameters into groups with/without weight decay."""
     parameters_info = {}
     for module_name, module in model.named_modules():
         for parameter_name, parameter in module.named_parameters():
@@ -101,6 +116,7 @@ def make_optimizer(
     config: dict[str, Any],
     parameter_groups,
 ) -> optim.Optimizer:
+    """Instantiate optimizer from configuration."""
     if config['optimizer'] == 'FT-Transformer-default':
         return optim.AdamW(parameter_groups, lr=1e-4, weight_decay=1e-5)
     return getattr(optim, config['optimizer'])(
@@ -110,10 +126,12 @@ def make_optimizer(
 
 
 def get_lr(optimizer: optim.Optimizer) -> float:
+    """Get current learning rate from optimizer."""
     return next(iter(optimizer.param_groups))['lr']
 
 
 def is_oom_exception(err: RuntimeError) -> bool:
+    """Check if runtime error is due to CUDA OOM."""
     return any(
         x in str(err)
         for x in [
@@ -131,6 +149,7 @@ def train_with_auto_virtual_batch(
     batch,
     chunk_size: int,
 ) -> tuple[Tensor, int]:
+    """Train with automatic virtual batching to avoid OOM."""
     batch_size = len(batch)
     random_state = zero.random.get_state()
     loss = None
@@ -164,5 +183,6 @@ def train_with_auto_virtual_batch(
 
 
 def process_epoch_losses(losses: list[Tensor]) -> tuple[list[float], float]:
+    """Aggregate training losses for logging."""
     losses_ = torch.stack(losses).tolist()
     return losses_, statistics.mean(losses_)
