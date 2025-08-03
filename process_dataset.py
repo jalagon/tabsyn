@@ -4,8 +4,9 @@ import os
 import sys
 import json
 import argparse
+from typing import Dict, List, Tuple, Optional
 
-TYPE_TRANSFORM ={
+TYPE_TRANSFORM = {
     'float', np.float32,
     'str', str,
     'int', int
@@ -19,45 +20,51 @@ parser = argparse.ArgumentParser(description='process dataset')
 parser.add_argument('--dataname', type=str, default=None, help='Name of dataset.')
 args = parser.parse_args()
 
-def preprocess_beijing():
+
+def preprocess_beijing() -> None:
+    """Preprocess the Beijing dataset by removing rows with missing values."""
     with open(f'{INFO_PATH}/beijing.json', 'r') as f:
         info = json.load(f)
-    
-    data_path = info['raw_data_path']
 
+    data_path = info['raw_data_path']
     data_df = pd.read_csv(data_path)
     columns = data_df.columns
 
+    # Drop the first column (typically an index or timestamp)
     data_df = data_df[columns[1:]]
 
-
+    # Remove rows containing NaN values and save the clean dataset
     df_cleaned = data_df.dropna()
-    df_cleaned.to_csv(info['data_path'], index = False)
+    df_cleaned.to_csv(info['data_path'], index=False)
 
-def preprocess_news():
+def preprocess_news() -> None:
+    """Preprocess the online news dataset by consolidating categorical columns."""
     with open(f'{INFO_PATH}/news.json', 'r') as f:
         info = json.load(f)
 
     data_path = info['raw_data_path']
     data_df = pd.read_csv(data_path)
+    # Drop non-informative URL column
     data_df = data_df.drop('url', axis=1)
 
     columns = np.array(data_df.columns.tolist())
 
-    cat_columns1 = columns[list(range(12,18))]
-    cat_columns2 = columns[list(range(30,38))]
+    # Identify sets of one-hot encoded categorical columns
+    cat_columns1 = columns[list(range(12, 18))]
+    cat_columns2 = columns[list(range(30, 38))]
 
-    cat_col1 = data_df[cat_columns1].astype(int).to_numpy().argmax(axis = 1)
-    cat_col2 = data_df[cat_columns2].astype(int).to_numpy().argmax(axis = 1)
+    # Collapse one-hot encoded columns into single categorical columns
+    cat_col1 = data_df[cat_columns1].astype(int).to_numpy().argmax(axis=1)
+    cat_col2 = data_df[cat_columns2].astype(int).to_numpy().argmax(axis=1)
 
     data_df = data_df.drop(cat_columns2, axis=1)
     data_df = data_df.drop(cat_columns1, axis=1)
 
     data_df['data_channel'] = cat_col1
     data_df['weekday'] = cat_col2
-    
+
     data_save_path = 'data/news/news.csv'
-    data_df.to_csv(f'{data_save_path}', index = False)
+    data_df.to_csv(f'{data_save_path}', index=False)
 
     columns = np.array(data_df.columns.tolist())
     num_columns = columns[list(range(45))]
@@ -68,26 +75,42 @@ def preprocess_news():
     info['cat_col_idx'] = [46, 47]
     info['target_col_idx'] = [45]
     info['data_path'] = data_save_path
-    
+
     name = 'news'
     with open(f'{INFO_PATH}/{name}.json', 'w') as file:
         json.dump(info, file, indent=4)
 
 
-def get_column_name_mapping(data_df, num_col_idx, cat_col_idx, target_col_idx, column_names = None):
-    
+def get_column_name_mapping(
+    data_df: pd.DataFrame,
+    num_col_idx: List[int],
+    cat_col_idx: List[int],
+    target_col_idx: List[int],
+    column_names: Optional[List[str]] = None,
+) -> Tuple[Dict[int, int], Dict[int, int], Dict[int, str]]:
+    """Build mappings between original and processed column indices.
+
+    Args:
+        data_df: Full dataset as a DataFrame.
+        num_col_idx: Indices of numerical columns.
+        cat_col_idx: Indices of categorical columns.
+        target_col_idx: Indices of target columns.
+        column_names: Optional explicit column names.
+
+    Returns:
+        Three dictionaries mapping original indices to processed indices, the
+        inverse mapping, and mapping from index to column name.
+    """
+
     if not column_names:
         column_names = np.array(data_df.columns.tolist())
-    
 
-    idx_mapping = {}
-
+    idx_mapping: Dict[int, int] = {}
     curr_num_idx = 0
     curr_cat_idx = len(num_col_idx)
     curr_target_idx = curr_cat_idx + len(cat_col_idx)
 
     for idx in range(len(column_names)):
-
         if idx in num_col_idx:
             idx_mapping[int(idx)] = curr_num_idx
             curr_num_idx += 1
@@ -98,23 +121,37 @@ def get_column_name_mapping(data_df, num_col_idx, cat_col_idx, target_col_idx, c
             idx_mapping[int(idx)] = curr_target_idx
             curr_target_idx += 1
 
-
-    inverse_idx_mapping = {}
-    for k, v in idx_mapping.items():
-        inverse_idx_mapping[int(v)] = k
-        
-    idx_name_mapping = {}
-    
-    for i in range(len(column_names)):
-        idx_name_mapping[int(i)] = column_names[i]
+    inverse_idx_mapping: Dict[int, int] = {int(v): k for k, v in idx_mapping.items()}
+    idx_name_mapping: Dict[int, str] = {int(i): column_names[i] for i in range(len(column_names))}
 
     return idx_mapping, inverse_idx_mapping, idx_name_mapping
 
 
-def train_val_test_split(data_df, cat_columns, num_train = 0, num_test = 0):
+def train_val_test_split(
+    data_df: pd.DataFrame,
+    cat_columns: List[str],
+    num_train: int = 0,
+    num_test: int = 0,
+) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Split a dataset into training and testing sets while covering categories.
+
+    The split ensures that all categories present in ``cat_columns`` are
+    represented in the training set. A deterministic seed is returned for
+    reproducibility.
+
+    Args:
+        data_df: Full dataset as a DataFrame.
+        cat_columns: List of categorical column names.
+        num_train: Number of training samples.
+        num_test: Number of test samples.
+
+    Returns:
+        A tuple containing the training DataFrame, testing DataFrame, and the
+        random seed used to generate the split.
+    """
+
     total_num = data_df.shape[0]
     idx = np.arange(total_num)
-
 
     seed = 1234
 
@@ -125,27 +162,33 @@ def train_val_test_split(data_df, cat_columns, num_train = 0, num_test = 0):
         train_idx = idx[:num_train]
         test_idx = idx[-num_test:]
 
-
         train_df = data_df.loc[train_idx]
         test_df = data_df.loc[test_idx]
 
-
-
+        # Ensure that all categories in cat_columns appear in the training set
         flag = 0
-        for i in cat_columns:
-            if len(set(train_df[i])) != len(set(data_df[i])):
+        for col in cat_columns:
+            if len(set(train_df[col])) != len(set(data_df[col])):
                 flag = 1
                 break
 
         if flag == 0:
             break
-        else:
-            seed += 1
-        
-    return train_df, test_df, seed    
+        seed += 1
+
+    return train_df, test_df, seed
 
 
-def process_data(name):
+def process_data(name: str) -> None:
+    """Process and save a dataset specified by name.
+
+    This function reads dataset-specific configuration, performs cleaning and
+    preprocessing steps, splits the data, and writes multiple artifacts to disk
+    for later use in experiments.
+
+    Args:
+        name: Name of the dataset to process.
+    """
 
     if name == 'news':
         preprocess_news()
@@ -157,7 +200,7 @@ def process_data(name):
 
     data_path = info['data_path']
     if info['file_type'] == 'csv':
-        data_df = pd.read_csv(data_path, header = info['header'])
+        data_df = pd.read_csv(data_path, header=info['header'])
 
     elif info['file_type'] == 'xls':
         data_df = pd.read_excel(data_path, sheet_name='Data', header=1)
