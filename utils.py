@@ -1,7 +1,19 @@
 import argparse
 import importlib
+from typing import Callable
 
-def execute_function(method, mode):
+
+def execute_function(method: str, mode: str) -> Callable[[argparse.Namespace], None]:
+    """Resolve the main function for a given method and mode.
+
+    Args:
+        method: Name of the model or baseline to execute.
+        mode: Either ``'train'`` or ``'sample'`` depending on the task.
+
+    Returns:
+        The callable ``main`` function from the corresponding module.
+    """
+
     if method == 'vae':
         mode = 'train'
     mode = 'main' if mode == 'train' else 'sample'
@@ -11,7 +23,9 @@ def execute_function(method, mode):
     elif method == 'tabsyn':
         module_name = f"tabsyn.{mode}"
     elif method == 'tabddpm':
-        module_name = f"baselines.tabddpm.main_train" if mode == 'main' else f"baselines.tabddpm.main_sample"
+        module_name = (
+            f"baselines.tabddpm.main_train" if mode == 'main' else f"baselines.tabddpm.main_sample"
+        )
     else:
         module_name = f"baselines.{method}.{mode}"
 
@@ -26,7 +40,9 @@ def execute_function(method, mode):
         exit(1)
     return train_function
 
-def get_args():
+
+def get_args() -> argparse.Namespace:
+    """Parse and return command-line arguments for the pipeline."""
     parser = argparse.ArgumentParser(description='Pipeline')
 
     # General configs

@@ -30,30 +30,52 @@ else:
 class_labels=None
 randn_like=torch.randn_like
 
-SIGMA_MIN=0.002
-SIGMA_MAX=80
-rho=7
-S_churn= 1
-S_min=0
-S_max=float('inf')
-S_noise=1
+SIGMA_MIN = 0.002
+SIGMA_MAX = 80
+rho = 7
+S_churn = 1
+S_min = 0
+S_max = float('inf')
+S_noise = 1
 
 
-## One denoising step from t to t-1
-def step(net, num_steps, i, t_cur, t_next, x_next):
+def step(
+    net: nn.Module,
+    num_steps: int,
+    i: int,
+    t_cur: torch.Tensor,
+    t_next: torch.Tensor,
+    x_next: torch.Tensor,
+) -> torch.Tensor:
+    """Perform a single reverse-diffusion step.
+
+    This function implements the solver described in the paper for stepping from
+    time ``t_cur`` to ``t_next``. The implementation follows the EDM sampler
+    and applies a second-order correction when appropriate.
+
+    Args:
+        net: Denoising network used to predict clean samples.
+        num_steps: Total number of sampling steps.
+        i: Index of the current step.
+        t_cur: Current time/sigma value.
+        t_next: Next time/sigma value.
+        x_next: Current sample to be updated in-place.
+
+    Returns:
+        The updated sample after one reverse-diffusion step.
+    """
 
     x_cur = x_next
-    # Increase noise temporarily.
+    # Increase noise temporarily to improve sample diversity.
     gamma = min(S_churn / num_steps, np.sqrt(2) - 1) if S_min <= t_cur <= S_max else 0
-    t_hat = net.round_sigma(t_cur + gamma * t_cur) 
+    t_hat = net.round_sigma(t_cur + gamma * t_cur)
     x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * S_noise * randn_like(x_cur)
     # Euler step.
-
     denoised = net(x_hat, t_hat).to(torch.float32)
     d_cur = (x_hat - denoised) / t_hat
     x_next = x_hat + (t_next - t_hat) * d_cur
 
-    # Apply 2nd order correction.
+    # Apply 2nd order correction for better accuracy.
     if i < num_steps - 1:
         denoised = net(x_next, t_next).to(torch.float32)
         d_prime = (x_next - denoised) / t_next
